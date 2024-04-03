@@ -210,7 +210,6 @@ graphviz
 gtkam
 gwenview
 ida
-multimedia/phonon-vlc
 inkscape
 kdiagram
 kgraphviewer
