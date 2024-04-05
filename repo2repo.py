@@ -251,16 +251,17 @@ def help():
     print("")
     print("repo2repo: create a local mirror of a FreeBSD repository")
     print("")
-    print("  -u <URL>      : example http://pkg.freebsd.org/FreeBSD:14:amd64/latest/")
-    print("  -r <path>     : local path to store the repository [default = repo]")
-    print("  -v <version>  : FreeBSD version [default = 14]")
-    print("  -c <cpu>      : CPU type, e.g. amd64, aarch64 [default = amd64]")
-    print("  -e <endpoint> : repository endpoint, e.g. latest, release_2 [default = quarterly]]")
-    print("  -i <file.iso> : output ISO file [default = None]]")
-    print("  -l <selected> : list of selected packages")
-    print("  -k            : keep repo path")
-    print("  -s            : skip unknown packages")
-    print("  -n            : no color")
+    print("  -u <URL>       : example http://pkg.freebsd.org/FreeBSD:14:amd64/latest/")
+    print("  -r <path>      : local path to store the repository [default = repo]")
+    print("  -v <version>   : FreeBSD version [default = 14]")
+    print("  -c <cpu>       : CPU type, e.g. amd64, aarch64 [default = amd64]")
+    print("  -e <endpoint>  : repository endpoint, e.g. latest, release_2 [default = quarterly]]")
+    print("  -i <file.iso>  : output ISO file [default = None]]")
+    print("  -l <selected>  : list of selected packages")
+    print("  -V <volume_ID> : volume ID for the ISO file")
+    print("  -k             : keep repo path")
+    print("  -s             : skip unknown packages")
+    print("  -n             : no color")
     print("")
 
 def main():
@@ -284,9 +285,11 @@ def main():
     keepRepoPath = False
     skipUnknown = False
     useColor = True
+    volumeID = "FreeBSD"
+    setVolID = None
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "u:hr:v:c:e:i:ksl:n")
+        opts, args = getopt.getopt(sys.argv[1:], "u:hr:v:c:e:i:ksl:nV:")
     except getopt.GetoptError as err:
         help()
         exit(2)
@@ -294,6 +297,7 @@ def main():
         if   o in ("-u"): forceRepoURL = a
         elif o in ("-r"): localRepoPath = a
         elif o in ("-v"): version = a
+        elif o in ("-V"): setVolID = a
         elif o in ("-c"): cpuType = a
         elif o in ("-e"): endpoint = a
         elif o in ("-i"): isoFile = a
@@ -314,6 +318,7 @@ def main():
         GREEN  = ""
         BLUE   = ""
         RESET  = ""
+
     if os.path.exists(localRepoPath):
         if not os.path.isdir(localRepoPath):
             print(f"{RED}ERROR{RESET}: destination path ({localRepoPath}) is not a directory!")
@@ -334,16 +339,26 @@ def main():
         repoURL = f"https://pkg.FreeBSD.org/FreeBSD:{version}:{cpuType}/{endpoint}"
     else:
         repoURL = forceRepoURL
+
     if not os.path.exists(selectedListFileName):
         print(f"{RED}ERROR{RESET}: unable to open file {selectedListFileName}")
         exit(0)
+
+    if not setVolID is None:
+        volumeID = setVolID
+    else:
+        volumeID = volumeID + "_" + cpuType
+
     url = repoURL+"/packagesite.txz"
+
     print(f"{WHITE}Getting list of packages from{RESET}: {url}")
     allPkg = loadPackageListFromURL(url)
+
     print(f"{WHITE}Getting list of wanted packages from{RESET}: {selectedListFileName}")
     wp = loadWantedPkg(selectedListFileName)
     pkgToDownload = dict(wp)
     pkgToDownload["pkg"] = 1
+
     print(f"{WHITE}Generating list of packages to fetch...{RESET}")
     firstPass = True
     while True:
@@ -357,6 +372,7 @@ def main():
             del pkgToDownload[u]
         else:
             break
+
     localPaths = []
     print(f"{WHITE}Downloading packages...{RESET}")
     for p in pkgToDownload:
@@ -378,11 +394,14 @@ def main():
             print(f"{GREEN}OK{RESET}")
         else:
             print(f"{WHITE}CACHED{RESET}")
+
     print(f"{WHITE}Generating meta.conf...{RESET}")
     with open(localRepoPath+"/"+"meta.conf","w") as f:
         f.write(g_meta)
+
     print(f"{WHITE}Generating packagesite.txz...{RESET}")
     os.system(f"cd {localRepoPath}; bsdtar -cvof packagesite.txz packagesite.yaml > /dev/null 2> /dev/null")
+
     print(f"{WHITE}Generating packagesite.pkg...{RESET}")
     os.system(f"cd {localRepoPath}; cp packagesite.txz packagesite.pkg")
 
@@ -404,10 +423,11 @@ def main():
 
     if not isoFile is None:
         print(f"{WHITE}Generating ISO file{RESET}: {isoFile}")
-        os.system(f"mkisofs -R -o {isoFile} {localRepoPath}")
+        os.system(f"mkisofs -R -V {volumeID} -o {isoFile} {localRepoPath}")
         if not keepRepoPath:
             print(f"{WHITE}Deleting {localRepoPath}{RESET}")
             os.system(f"rm -rf {localRepoPath}")
+
     print(f"{GREEN}Done.{RESET}")
 
 if __name__ == "__main__":

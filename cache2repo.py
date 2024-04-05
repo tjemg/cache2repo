@@ -14,6 +14,7 @@
 #    umount /mirror
 #    mdconfig -d -u 0
 #
+import subprocess
 import sqlite3
 import hashlib
 import getopt
@@ -47,6 +48,13 @@ g_mirror = """FreeBSD_mirror: {
   enabled: yes
 }
 """
+
+RED    = "\033[0;31m"
+YELLOW = "\033[1;33m"
+WHITE  = "\033[1;37m"
+GREEN  = "\033[0;32m"
+BLUE   = "\033[0;34m"
+RESET  = "\033[0m"
 
 def fileExists( fName ):
     try:
@@ -141,6 +149,12 @@ def loadGlobalVars( cu ):
     global g_groups
     global g_users
     global g_licenselogic
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     try:
         x = cu.execute("SELECT * FROM licenses")
         for l in x:
@@ -175,12 +189,18 @@ def loadGlobalVars( cu ):
                            124: "or"
                          }
     except Exception as e:
-        print("ERROR:",str(e))
+        print(f"{RED}ERROR{RESET}:",str(e))
         sys.exit(0)
 
 def computeDeps(cu):
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     try:
-        print("Computing package dependencies...")
+        print(f"{WHITE}Computing package dependencies...{RESET}")
         global g_deps
         g_deps = {}
         x = cu.execute("SELECT origin, name, version, package_id FROM deps")
@@ -191,11 +211,17 @@ def computeDeps(cu):
             else:
                 g_deps[package_id][name] = {"origin":origin, "version":version}
     except Exception as e:
-        print("ERROR:",str(e))
+        print(f"{RED}ERROR{RESET}:",str(e))
         sys.exit(0)
 
 def loadPackages(cu, localCache="/var/cache/pkg"):
     global g_verboseMode
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     try:
         # Read all packages from local database
         x = cu.execute("SELECT id, name, origin, version, comment, maintainer, www, arch, prefix, flatsize, licenselogic, desc, message FROM packages")
@@ -219,7 +245,7 @@ def loadPackages(cu, localCache="/var/cache/pkg"):
             allPackages.append(package)
         
         # Build a list of packages, based on local database + local cache
-        print("Building list of local packages...")
+        print(f"{WHITE}Building list of local packages...{RESET}")
         repoPackages = []
         for p in allPackages:
             try:
@@ -278,88 +304,158 @@ def loadPackages(cu, localCache="/var/cache/pkg"):
                     pkgDesc["licenses"] = pkgLicences
                 repoPackages.append(pkgDesc)
             except Exception as e:
-                if g_verboseMode: print("Exception: "+str(e))
+                if g_verboseMode: print(f"{RED}Exception{RESET}: "+str(e))
                 next
     except Exception as e:
-        print("ERROR:",str(e))
+        print(f"{RED}ERROR{RESET}:",str(e))
         sys.exit(0)
     return repoPackages
 
 def openLocalDB(localDBFile):
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     try:
         cx = sqlite3.connect(localDBFile)
         cu = cx.cursor()
     except:
-        print(f"ERROR: could not open local DB file {localDBFile}")
+        print(f"{RED}ERROR{RESET}: could not open local DB file {localDBFile}")
+        exit(0)
     return (cx,cu)
+
+def usage():
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
+    print("")
+    print("cache2repo: create a mirror of a local FreeBSD pkg cache")
+    print("")
+    print("  -o <dir>       : output directory")
+    print("  -i <ISOfile>   : ISO file name (default=mirror.iso)")
+    print("  -V <volume_ID> : volume ID for the ISO file")
+    print("  -n             : no color")
+    print("")
+    exit(0)
 
 def main():
     global g_verboseMode 
     global g_meta
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
+
     outputDir   = "mirror"
     localDBFile = "/var/db/pkg/local.sqlite"
     cacheFolder = "/var/cache/pkg"
     g_verboseMode = False
+    useColor = True
+    isoFile = None
+    volumeID = "FreeBSD"
+    setVolID = None
+    keepRepoPath = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "ho:v", ["help", "output="])
+        opts, args = getopt.getopt(sys.argv[1:], "ho:vi:nV:k", ["help", "output="])
     except getopt.GetoptError as err:
-        # print help information and exit:
-        print(err)  # will print something like "option -a not recognized"
+        print(err)
         usage()
-        sys.exit(2)
+        exit(2)
     for o, a in opts:
-        if o in ("-v"):
-            g_verboseMode = True
-        elif o in ("-h", "--help"):
-            usage()
-            sys.exit()
-        elif o in ("-o", "--output"):
-            outputDir = a
+        if   o in ("-v"): g_verboseMode = True
+        elif o in ("-V"): setVolID = a
+        elif o in ("-i"): isoFile = a
+        elif o in ("-n"): useColor = False
+        elif o in ("-k"): keepRepoPath = True
+        elif o in ("-h", "--help"): usage()
+        elif o in ("-o", "--output"): outputDir = a
         else:
             assert False, "unhandled option"
+
+    if useColor == False:
+        RED    = ""
+        YELLOW = ""
+        WHITE  = ""
+        GREEN  = ""
+        BLUE   = ""
+        RESET  = ""
+
+    if os.path.exists(outputDir):
+        if not os.path.isdir(outputDir):
+            print(f"{RED}ERROR{RESET}: destination path ({outputDir}) is not a directory!")
+            exit(0)
+    if not os.path.exists(outputDir):
+        os.system(f"mkdir {outputDir}")
+
+    cpuType = subprocess.check_output(["uname","-m"]).decode().strip("\n")
+
+    if not setVolID is None:
+        volumeID = setVolID
+    else:
+        volumeID = volumeID + "_" + cpuType
 
     conn, cursor = openLocalDB(localDBFile)
     loadGlobalVars(cursor)
     computeDeps(cursor)
     repoPackages = loadPackages(cursor)
 
-    print("Generating packagesite.yaml...")
+    print(f"{WHITE}Generating packagesite.yaml...{RESET}")
     with open(outputDir+"/"+"packagesite.yaml","w") as f:
         for p in repoPackages:
             f.write(json.dumps(p)+"\n")
 
-
-    print("Generating meta.conf...")
+    print(f"{WHITE}Generating meta.conf...{RESET}")
     with open(outputDir+"/"+"meta.conf","w") as f:
         f.write(g_meta)
 
-    print("Generating packagesite.txz...")
+    print(f"{WHITE}Generating packagesite.txz...{RESET}")
     os.system(f"cd {outputDir}; bsdtar -cvof packagesite.txz packagesite.yaml > /dev/null 2> /dev/null")
-    print("Generating packagesite.pkg...")
+
+    print(f"{WHITE}Generating packagesite.pkg...{RESET}")
     os.system(f"cd {outputDir}; cp packagesite.txz packagesite.pkg")
 
-    print("Copying PKG files...")
+    print(f"{WHITE}Copying PKG files...{RESET}")
     os.system(f"mkdir -p {outputDir}/All; cd {outputDir}/All")
     for f in glob.glob(f"{cacheFolder}/*.pkg"):
         if not re.match(r".*~[0-9a-zA-Z]+.pkg$",f):
+            fName = os.path.basename(f)
+            print(f"{BLUE}{f}{RESET} -> {YELLOW}{outputDir}/All/{fName}{RESET}", flush=True )
             os.system(f"cp {f} {outputDir}/All")
 
-    print("Preparing pkg for bootstraping...")
+    print(f"{WHITE}Preparing pkg for bootstraping...{RESET}")
     os.system(f"mkdir -p {outputDir}/usr/sbin/; cp /usr/sbin/pkg {outputDir}/usr/sbin/pkg")
     os.system(f"mkdir -p {outputDir}/usr/local/sbin/; cp /usr/local/sbin/pkg {outputDir}/usr/local/sbin/pkg; cp /usr/local/sbin/pkg-static {outputDir}/usr/local/sbin/pkg-static")
     os.system(f"mkdir -p {outputDir}/usr/local/etc/; cp /usr/local/etc/pkg.conf {outputDir}/usr/local/etc/pkg.conf")
     os.system(f"mkdir -p {outputDir}/etc/pkg/")
+
     with open(outputDir+"/etc/pkg/"+"mirror.conf","w") as f:
         f.write(g_mirror)
+
     os.system(f"cd {outputDir}; tar cvzf pkg-bootstrap.tgz etc usr; rm -rf etc usr")
-    os.system(f"mkisofs -R -o mirror.iso {outputDir}")
-    os.system(f"rm -rf {outputDir}")
+
+    if not isoFile is None:
+        print(f"{WHITE}Generating ISO file{RESET}: {isoFile}")
+        os.system(f"mkisofs -R -V {volumeID} -o {isoFile} {outputDir}")
+        if not keepRepoPath:
+            print(f"{WHITE}Deleting {outputDir}{RESET}")
+            os.system(f"rm -rf {outputDir}")
+
+    # cleanup
     os.system(f"rm -f packagesite.yaml")
     os.system(f"rm -f packagesite.txz")
     os.system(f"rm -f meta.conf")
 
     conn.close()
+
+    print(f"{GREEN}Done.{RESET}")
 
 if __name__ == "__main__":
     main()

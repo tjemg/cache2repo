@@ -408,6 +408,7 @@ gamin
 garcon
 gavl
 gawk
+gcc
 gcc-arm-embedded
 gcc10
 gcc11
