@@ -6153,6 +6153,7 @@ pydbus-common
 pygobject3-common
 pylint-py39
 pystring
+python
 python310
 python311
 python38

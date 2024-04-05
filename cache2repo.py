@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.9
+#!/usr/local/bin/python
 #
 # (C) 2024, Tiago Gasiba
 #           tiago.gasiba@gmail.com
