@@ -42,6 +42,13 @@ g_mirror = """FreeBSD_mirror: {
 }
 """
 
+RED    = "\033[0;31m"
+YELLOW = "\033[1;33m"
+WHITE  = "\033[1;37m"
+GREEN  = "\033[0;32m"
+BLUE   = "\033[0;34m"
+RESET  = "\033[0m"
+
 def getFileSize( fileName ):
     try:
         fileSize = os.path.getsize(fileName)
@@ -67,7 +74,7 @@ def extractFromTXZ( inData, wantedFile):
             if file_data:
                 return file_data.read()
             else:
-                print(f"File '{wantedFile}' not found in the archive.")
+                print(f"{RED}File '{wantedFile}' not found in the archive.{RESET}")
                 return None
     except tarfile.TarError as e:
         print("Error extracting file:", e)
@@ -106,8 +113,9 @@ def loadWantedPkg( fileName ):
     except Exception as e:
         return None
 
-def getNewDeps( currList, allPkg ):
+def getNewDeps( currList, allPkg, skipUnknown ):
     newDeps = {}
+    unknownPackages = {}
     willQuit = False
     for p in currList:
         # print(f"Searching for dependencies of {p}")
@@ -116,20 +124,21 @@ def getNewDeps( currList, allPkg ):
             try:
                 thisPkg = allPkg[p]
             except Exception as e:
-                print("ERROR:",e)
-                willQuit = True
+                print(f"{YELLOW}WARN{RESET}: unknown package {WHITE}{p}{RESET}")
+                unknownPackages[p] = 1
+                if skipUnknown==False: willQuit = True
             if thisPkg is not None:
                 dp = thisPkg.get("deps",{})
                 for dpn in dp:
                     if dpn not in currList:
-                        #print(f"New dependency: {dpn}")
                         newDeps[dpn] = 1
         except Exception as e:
-            print(f"ERROR: unknown package {p} - " + str(e))
-            willQuit = True
+            print(f"{YELLOW}WARN{RESET}: unknown package {WHITE}{p}{RESET} - " + str(e))
+            unknownPackages[p] = 1
+            if skipUnknown==False: willQuit = True
     if willQuit:
         exit(0)
-    return newDeps
+    return (newDeps, unknownPackages)
 
 def help():
     print("")
@@ -141,7 +150,10 @@ def help():
     print("  -c <cpu>      : CPU type, e.g. amd64, aarch64 [default = amd64]")
     print("  -e <endpoint> : repository endpoint, e.g. latest, release_2 [default = quarterly]]")
     print("  -i <file.iso> : output ISO file [default = None]]")
+    print("  -l <selected> : list of selected packages")
     print("  -k            : keep repo path")
+    print("  -s            : skip unknown packages")
+    print("  -n            : no color")
     print("")
 
 def main():
@@ -152,39 +164,45 @@ def main():
     version = "14"
     endpoint = "quarterly"
     localRepoPath = "repo"
+    selectedListFileName = "selected.txt"
     forceRepoURL = None
     isoFile = None
     keepRepoPath = False
+    skipUnknown = False
+    useColor = True
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "u:hr:v:c:e:i:k")
+        opts, args = getopt.getopt(sys.argv[1:], "u:hr:v:c:e:i:ksl:n")
     except getopt.GetoptError as err:
-        usage()
-        sys.exit(2)
+        help()
+        exit(2)
     for o, a in opts:
-        if o in ("-u"):
-            forceRepoURL = a
-        elif o in ("-r"):
-            localRepoPath = a
-        elif o in ("-v"):
-            version = a
-        elif o in ("-c"):
-            cpuType = a
-        elif o in ("-e"):
-            endpoint = a
-        elif o in ("-i"):
-            isoFile = a
-        elif o in ("-k"):
-            keepRepoPath = True
+        if   o in ("-u"): forceRepoURL = a
+        elif o in ("-r"): localRepoPath = a
+        elif o in ("-v"): version = a
+        elif o in ("-c"): cpuType = a
+        elif o in ("-e"): endpoint = a
+        elif o in ("-i"): isoFile = a
+        elif o in ("-l"): selectedListFileName = a
+        elif o in ("-k"): keepRepoPath = True
+        elif o in ("-s"): skipUnknown = True
+        elif o in ("-n"): useColor = False
         elif o in ("-h"):
             help()
             exit(0)
         else:
             assert False, "unhandled option: "+str(o)
 
+    if useColor == False:
+        RED    = ""
+        YELLOW = ""
+        WHITE  = ""
+        GREEN  = ""
+        BLUE   = ""
+        RESET  = ""
     if os.path.exists(localRepoPath):
         if not os.path.isdir(localRepoPath):
-            print(f"ERROR: destination path ({localRepoPath}) is not a directory!")
+            print(f"{RED}ERROR{RESET}: destination path ({localRepoPath}) is not a directory!")
             exit(0)
 
     if not os.path.exists(localRepoPath):
@@ -192,31 +210,40 @@ def main():
 
     if os.path.exists(localRepoPath):
         if not os.path.isdir(localRepoPath):
-            print(f"ERROR: unknown error in repo path creation!")
+            print(f"{RED}ERROR{RESET}: unknown error in repo path creation!")
             exit(0)
     else:
-        print(f"ERROR: could not create destination path ({localRepoPath})")
+        print(f"{RED}ERROR{RESET}: could not create destination path ({localRepoPath})")
         exit(0)
 
     if forceRepoURL is None:
         repoURL = f"https://pkg.FreeBSD.org/FreeBSD:{version}:{cpuType}/{endpoint}"
     else:
         repoURL = forceRepoURL
+    if not os.path.exists(selectedListFileName):
+        print(f"{RED}ERROR{RESET}: unable to open file {selectedListFileName}")
+        exit(0)
     url = repoURL+"/packagesite.txz"
-    print(f"Getting list of packages from: {url}")
+    print(f"{WHITE}Getting list of packages from{RESET}: {url}")
     allPkg = loadPackageListFromURL(url)
-    print(f"Getting list of wanted packages from: selected.txt")
-    wp = loadWantedPkg("selected.txt")
+    print(f"{WHITE}Getting list of wanted packages from{RESET}: {selectedListFileName}")
+    wp = loadWantedPkg(selectedListFileName)
     pkgToDownload = dict(wp)
-    print("Generating list of packages to fetch...")
+    print(f"{WHITE}Generating list of packages to fetch...{RESET}")
+    firstPass = True
     while True:
-        np = getNewDeps(pkgToDownload, allPkg)
+        if firstPass and skipUnknown:
+            (np, unk) = getNewDeps(pkgToDownload, allPkg, True)
+        else:
+            (np, unk) = getNewDeps(pkgToDownload, allPkg, False)
         if np != {}:
             for p in np: pkgToDownload[p] = 1
+        for u in unk:
+            del pkgToDownload[u]
         else:
             break
     localPaths = []
-    print("Downloading packages...")
+    print(f"{WHITE}Downloading packages...{RESET}")
     for p in pkgToDownload:
         repoPath = allPkg[p]["repopath"]
         fileURL = repoURL+"/" + repoPath
@@ -224,8 +251,8 @@ def main():
         localPath = os.path.dirname(os.path.realpath(fileName))
         if localPath not in localPaths:
             localPaths.append(localPath)
-            os.system(f"mkdir {localPath}")
-        print(f"{fileURL} -> {fileName} : ", end="", flush=True )
+            os.system(f"mkdir {localPath} 2> /dev/null > /dev/null")
+        print(f"{BLUE}{fileURL}{RESET} -> {YELLOW}{fileName}{RESET} : ", end="", flush=True )
         if getFileSize(fileName) != allPkg[p]["pkgsize"]:
             fileContents = fetchURL(fileURL)
             with open(fileName,"wb") as f:
@@ -233,18 +260,18 @@ def main():
             with open(localRepoPath+"/packagesite.yaml","a") as f:
                 f.write(json.dumps(allPkg[p]))
                 f.write("\n")
-            print(f"OK")
+            print(f"{GREEN}OK{RESET}")
         else:
-            print(f"CACHED")
-    print("Generating meta.conf...")
+            print(f"{WHITE}CACHED{RESET}")
+    print(f"{WHITE}Generating meta.conf...{RESET}")
     with open(localRepoPath+"/"+"meta.conf","w") as f:
         f.write(g_meta)
-    print("Generating packagesite.txz...")
+    print(f"{WHITE}Generating packagesite.txz...{RESET}")
     os.system(f"cd {localRepoPath}; bsdtar -cvof packagesite.txz packagesite.yaml > /dev/null 2> /dev/null")
-    print("Generating packagesite.pkg...")
+    print(f"{WHITE}Generating packagesite.pkg...{RESET}")
     os.system(f"cd {localRepoPath}; cp packagesite.txz packagesite.pkg")
 
-    print("Preparing pkg for bootstraping...")
+    print(f"{WHITE}Preparing pkg for bootstraping...{RESET}")
     os.system(f"mkdir -p {localRepoPath}/usr/sbin/; cp /usr/sbin/pkg {localRepoPath}/usr/sbin/pkg")
     os.system(f"mkdir -p {localRepoPath}/usr/local/sbin/; cp /usr/local/sbin/pkg {localRepoPath}/usr/local/sbin/pkg; cp /usr/local/sbin/pkg-static {localRepoPath}/usr/local/sbin/pkg-static")
     os.system(f"mkdir -p {localRepoPath}/usr/local/etc/; cp /usr/local/etc/pkg.conf {localRepoPath}/usr/local/etc/pkg.conf")
@@ -254,9 +281,12 @@ def main():
     os.system(f"cd {localRepoPath}; tar cvzf pkg-bootstrap.tgz etc usr; rm -rf etc usr")
 
     if not isoFile is None:
+        print(f"{WHITE}Generating ISO file{RESET}: {isoFile}")
         os.system(f"mkisofs -R -o {isoFile} {localRepoPath}")
         if not keepRepoPath:
+            print(f"{WHITE}Deleting {localRepoPath}{RESET}")
             os.system(f"rm -rf {localRepoPath}")
+    print(f"{GREEN}Done.{RESET}")
 
 if __name__ == "__main__":
     main()
