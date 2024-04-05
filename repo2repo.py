@@ -67,7 +67,13 @@ def fetchURL( url ):
     except Exception as e:
         return None
 
-def extractFromTXZ( inData, wantedFile):
+def extractFromTXZ( inData, wantedFile ):
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     try:
         with tarfile.open(fileobj=io.BytesIO(inData), mode='r:xz') as tar:
             file_data = tar.extractfile(wantedFile)
@@ -114,6 +120,12 @@ def loadWantedPkg( fileName ):
         return None
 
 def getNewDeps( currList, allPkg, skipUnknown ):
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     newDeps = {}
     unknownPackages = {}
     willQuit = False
@@ -141,6 +153,12 @@ def getNewDeps( currList, allPkg, skipUnknown ):
     return (newDeps, unknownPackages)
 
 def help():
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     print("")
     print("repo2repo: create a local mirror of a FreeBSD repository")
     print("")
@@ -160,6 +178,12 @@ def main():
     global g_verboseMode 
     global g_meta
     global g_mirror
+    global RED
+    global YELLOW
+    global WHITE
+    global GREEN
+    global BLUE
+    global RESET
     cpuType = "amd64"
     version = "14"
     endpoint = "quarterly"
