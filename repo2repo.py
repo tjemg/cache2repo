@@ -42,6 +42,13 @@ g_mirror = """FreeBSD_mirror: {
 }
 """
 
+def getFileSize( fileName ):
+    try:
+        fileSize = os.path.getsize(fileName)
+        return fileSize
+    except:
+        return -1
+
 def fetchURL( url ):
     global g_headers
     try:
@@ -218,13 +225,17 @@ def main():
         if localPath not in localPaths:
             localPaths.append(localPath)
             os.system(f"mkdir {localPath}")
-        fileContents = fetchURL(fileURL)
-        with open(fileName,"wb") as f:
-            f.write(fileContents)
-        print(f"{fileURL} -> {fileName}" )
-        with open(localRepoPath+"/packagesite.yaml","a") as f:
-            f.write(json.dumps(allPkg[p]))
-            f.write("\n")
+        print(f"{fileURL} -> {fileName} : ", end="", flush=True )
+        if getFileSize(fileName) != allPkg[p]["pkgsize"]:
+            fileContents = fetchURL(fileURL)
+            with open(fileName,"wb") as f:
+                f.write(fileContents)
+            with open(localRepoPath+"/packagesite.yaml","a") as f:
+                f.write(json.dumps(allPkg[p]))
+                f.write("\n")
+            print(f"OK")
+        else:
+            print(f"CACHED")
     print("Generating meta.conf...")
     with open(localRepoPath+"/"+"meta.conf","w") as f:
         f.write(g_meta)
@@ -243,7 +254,7 @@ def main():
     os.system(f"cd {localRepoPath}; tar cvzf pkg-bootstrap.tgz etc usr; rm -rf etc usr")
 
     if not isoFile is None:
-        os.system(f"mkisofs -R -o mirror.iso {localRepoPath}")
+        os.system(f"mkisofs -R -o {isoFile} {localRepoPath}")
         if not keepRepoPath:
             os.system(f"rm -rf {localRepoPath}")
 
