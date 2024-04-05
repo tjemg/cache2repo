@@ -9,7 +9,7 @@
 #
 # To mount the ISO:
 #    mdconfig -a -t vnode -f ISO -u 0
-#    mount -t cd9660 /dev/md0 /mirror
+#    mount -t udf /dev/md0 /mirror
 #
 #    umount /mirror
 #    mdconfig -d -u 0
@@ -443,7 +443,7 @@ def main():
 
     if not isoFile is None:
         print(f"{WHITE}Generating ISO file{RESET}: {isoFile}")
-        os.system(f"mkisofs -R -V {volumeID} -o {isoFile} {outputDir}")
+        os.system(f"mkisofs -R -V {volumeID} -UDF -o {isoFile} {outputDir}")
         if not keepRepoPath:
             print(f"{WHITE}Deleting {outputDir}{RESET}")
             os.system(f"rm -rf {outputDir}")
