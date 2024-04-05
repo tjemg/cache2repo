@@ -41,8 +41,7 @@ g_mirror = """FreeBSD_mirror: {
   enabled: yes
 }
 """
-g_pkg_conf ="""
-# System-wide configuration file for pkg(8)
+g_pkg_conf ="""# System-wide configuration file for pkg(8)
 # For more information on the file format and
 # options please refer to the pkg.conf(5) man page
 
